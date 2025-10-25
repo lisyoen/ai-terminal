@@ -55,6 +55,8 @@ export const config = {
     OPENAI_BASE_URL: process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1',
     OPENAI_MODEL: process.env.OPENAI_MODEL || 'gpt-4o-mini',
     NODE_ENV: process.env.NODE_ENV || 'development',
-    VITE_DEV_SERVER_URL: process.env.VITE_DEV_SERVER_URL || 'http://localhost:5173'
+    VITE_DEV_SERVER_URL: process.env.VITE_DEV_SERVER_URL || 'http://localhost:5173',
+    LLM_CACHE_TTL: parseInt(process.env.LLM_CACHE_TTL || '300'),
+    LLM_CONTEXT_DEPTH: parseInt(process.env.LLM_CONTEXT_DEPTH || '5')
   }
 }

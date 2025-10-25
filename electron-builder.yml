@@ -1,14 +1,51 @@
-appId: com.example.ai-terminal
+appId: com.lisyoen.ai-terminal
 productName: AI Terminal
 directories:
-  output: release
+  output: dist/release
+  buildResources: build
 files:
-  - dist/**/*
-  - node_modules/**/*
-  - scripts/**/*
+  - "dist/**"
+  - "package.json"
+  - "!**/*.map"
+  - "!**/node_modules/.cache/**"
+  - "!src/**"
+  - "!electron/**"
+  - "!types/**"
+  - "!.env"
+  - "!.env.*"
+  - "!*.config.*"
+  - "!tsconfig.json"
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  artifactName: "AI-Terminal-${version}-Setup.${ext}"
+  legalTrademarks: "lisyoen"
+  sign: false
+  certificateFile: null
+  certificatePassword: null
+nsis:
+  oneClick: true
+  perMachine: false
+  allowToChangeInstallationDirectory: false
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  displayLanguageSelector: false
+  installerLanguages:
+    - en_US
+    - ko_KR
+  warningsAsErrors: false
+portable:
+  artifactName: "AI-Terminal-${version}-Portable.${ext}"
 mac:
   target: dmg
-win:
-  target: nsis
 linux:
   target: AppImage
+publish: never   # 자동 배포 비활성화(수동 릴리스)
+compression: normal
+electronDownload:
+  cache: .electron-cache
+afterSign: false
+beforeBuild: false
+forceCodeSigning: false

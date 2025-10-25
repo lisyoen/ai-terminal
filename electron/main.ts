@@ -1,9 +1,21 @@
-import { app, BrowserWindow, ipcMain } from 'electron'
+import { app, BrowserWindow, ipcMain, Menu } from 'electron'
 import { join } from 'path'
 import { validateMessage } from '../types/messages'
 import { TerminalManager } from './terminal'
 
 const isDev = process.env.NODE_ENV === 'development'
+const autoUpdateEnabled = process.env.AUTO_UPDATE === 'true'
+
+// Optional auto-updater import
+let autoUpdater: any = null
+if (autoUpdateEnabled && !isDev) {
+  try {
+    const { autoUpdater: updater } = require('electron-updater')
+    autoUpdater = updater
+  } catch (error) {
+    console.warn('electron-updater not available:', error)
+  }
+}
 
 class App {
   private mainWindow: BrowserWindow | null = null
@@ -13,6 +25,7 @@ class App {
     this.terminalManager = new TerminalManager()
     this.setupApp()
     this.setupIPC()
+    this.setupAutoUpdater()
   }
 
   private setupApp() {
@@ -32,6 +45,7 @@ class App {
 
     app.whenReady().then(() => {
       this.createWindow()
+      this.setupMenu()
     })
   }
 
@@ -135,6 +149,118 @@ class App {
         this.mainWindow.webContents.send('error', error)
       }
     })
+  }
+
+  private setupMenu() {
+    const template: any[] = [
+      {
+        label: 'File',
+        submenu: [
+          {
+            label: 'Quit',
+            accelerator: process.platform === 'darwin' ? 'Cmd+Q' : 'Ctrl+Q',
+            click: () => {
+              app.quit()
+            }
+          }
+        ]
+      },
+      {
+        label: 'View',
+        submenu: [
+          {
+            label: 'Reload',
+            accelerator: 'CmdOrCtrl+R',
+            click: (item: any, focusedWindow: BrowserWindow) => {
+              if (focusedWindow) focusedWindow.reload()
+            }
+          },
+          {
+            label: 'Toggle Developer Tools',
+            accelerator: process.platform === 'darwin' ? 'Alt+Cmd+I' : 'Ctrl+Shift+I',
+            click: (item: any, focusedWindow: BrowserWindow) => {
+              if (focusedWindow) focusedWindow.webContents.toggleDevTools()
+            }
+          }
+        ]
+      },
+      {
+        label: 'Help',
+        submenu: [
+          {
+            label: 'About',
+            click: () => {
+              // Show about dialog
+            }
+          }
+        ]
+      }
+    ]
+
+    // Add update menu item if auto-update is enabled
+    if (autoUpdateEnabled && autoUpdater) {
+      template[2].submenu.push({
+        type: 'separator'
+      }, {
+        label: 'Check for Updates...',
+        click: () => {
+          this.checkForUpdates()
+        }
+      })
+    }
+
+    const menu = Menu.buildFromTemplate(template)
+    Menu.setApplicationMenu(menu)
+  }
+
+  private setupAutoUpdater() {
+    if (!autoUpdateEnabled || !autoUpdater || isDev) {
+      console.log('Auto-updater disabled')
+      return
+    }
+
+    // Configure auto-updater
+    autoUpdater.setFeedURL({
+      provider: 'github',
+      owner: 'lisyoen',
+      repo: 'ai-terminal',
+      private: false
+    })
+
+    // Auto-updater events
+    autoUpdater.on('checking-for-update', () => {
+      console.log('Checking for update...')
+    })
+
+    autoUpdater.on('update-available', (info: any) => {
+      console.log('Update available:', info)
+    })
+
+    autoUpdater.on('update-not-available', (info: any) => {
+      console.log('Update not available:', info)
+    })
+
+    autoUpdater.on('error', (err: any) => {
+      console.error('Error in auto-updater:', err)
+    })
+
+    autoUpdater.on('download-progress', (progressObj: any) => {
+      let log_message = "Download speed: " + progressObj.bytesPerSecond
+      log_message = log_message + ' - Downloaded ' + progressObj.percent + '%'
+      log_message = log_message + ' (' + progressObj.transferred + "/" + progressObj.total + ')'
+      console.log(log_message)
+    })
+
+    autoUpdater.on('update-downloaded', (info: any) => {
+      console.log('Update downloaded:', info)
+      autoUpdater.quitAndInstall()
+    })
+  }
+
+  private checkForUpdates() {
+    if (autoUpdater) {
+      autoUpdater.checkForUpdatesAndNotify()
+    }
   }
 }
 

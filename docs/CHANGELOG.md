@@ -9,9 +9,66 @@
 
 ### 예정사항
 - [ ] 터미널 테마 커스터마이징
+
+## [0.8.0] - 2025-10-25 - 빌드 시스템 및 배포 준비
+
+### 추가됨
+- Windows 배포 시스템 (electron-builder 설정)
+- NSIS 설치형 빌드 지원
+- 포터블 실행 파일 생성
+- 자동 업데이트 시스템 (선택적, 기본 비활성화)
+- 프로덕션 빌드 스크립트 (`start:prod`)
+- 배포용 빌드 스크립트 (`dist:win`, `dist:portable`)
+
+### 개선됨
+- 개발/프로덕션 환경 분리 개선
+- package.json 빌드 설정 정비
+- README.md에 빌드/배포 가이드 추가
+- DevTools 자동 열림 비활성화 (프로덕션)
+
+### 기술적 개선
+- electron-builder 통합 및 설정
+- 코드 서명 옵션 (기본 비활성화)
+- 자동 업데이트 인프라 구축
+- 빌드 아티팩트 경로 정규화
+
+### 수정됨
+- 프로덕션 빌드에서 파일 경로 문제 해결
+- Windows 배포 환경 호환성 개선
 - [ ] 다중 탭 지원
 - [ ] 명령 자동완성 기능
 - [ ] 설정 UI 추가
+
+---
+
+## [0.8.0] - 2024-12-29
+
+### 추가됨 ✨
+- **Windows 배포 시스템**: electron-builder 기반 패키징
+- **NSIS 인스톨러**: One-click Windows 인스톨러 지원
+- **포터블 앱**: 설치 없이 실행 가능한 독립 실행 파일
+- **자동 업데이트**: GitHub Releases 기반 자동 업데이트 시스템
+- **배포 스크립트**: 
+  - `npm run dist:win` - NSIS 인스톨러 생성
+  - `npm run dist:portable` - 포터블 앱 생성
+  - `npm run start:prod` - 프로덕션 모드 실행
+
+### 변경됨 🔄
+- **main.ts**: AUTO_UPDATE 환경 변수 지원 및 Help 메뉴 추가
+- **package.json**: electron-updater 의존성 및 빌드 스크립트 추가
+- **빌드 구성**: electron-builder.yml 설정 파일 추가
+
+### 기술적 개선 🔧
+- **자동 업데이트 프로바이더**: GitHub 리포지토리 연동
+- **코드 서명**: 개발 환경에서는 비활성화, 프로덕션용 설정 준비
+- **파일 압축**: 7z 최대 압축으로 배포 파일 크기 최적화
+- **메뉴 시스템**: Help → Check for Updates 메뉴 항목 추가
+
+### 배포 정보 📦
+- **앱 ID**: `com.lisyoen.ai-terminal`
+- **포터블 앱 크기**: ~158MB
+- **지원 플랫폼**: Windows 10/11 x64
+- **출력 위치**: `dist/release/`
 
 ---
 

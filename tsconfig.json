@@ -10,7 +10,7 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "noEmit": false,
-    "outDir": "./dist",
+    "outDir": "./dist/electron",
     "jsx": "react-jsx",
     "strict": true,
     "noUnusedLocals": false,

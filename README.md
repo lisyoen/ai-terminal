@@ -133,6 +133,94 @@ npm run electron     # Electron 앱 실행
 - **로깅**: JSONL + 로그 로테이션
 - **AI**: OpenAI API (ChatGPT)
 
+## 빌드 및 배포
+
+### 시스템 요구사항
+
+- **Node.js**: 20.x 이상
+- **Windows**: Windows 10/11 (64-bit)
+- **여유 공간**: 2GB 이상
+- **권한**: 개발자 모드 또는 관리자 권한 (심볼릭 링크 생성용)
+
+### 개발 빌드
+
+```bash
+# 의존성 설치
+npm install
+
+# 개발 서버 실행
+npm run dev
+
+# 별도 터미널에서 Electron 실행
+npm run build:electron
+npm run electron
+```
+
+### 프로덕션 빌드
+
+```bash
+# 전체 빌드 (Renderer + Electron)
+npm run build
+
+# 프로덕션 실행
+npm run start:prod
+```
+
+### Windows 배포판 생성
+
+```bash
+# NSIS 설치형 (.exe)
+npm run dist:win
+
+# 포터블 버전 (압축 해제 후 실행)
+npm run dist:portable
+```
+
+### 빌드 결과물
+
+- **설치형**: `release/AI-Terminal-0.5.0-Setup.exe`
+- **포터블**: `release/win-unpacked/AI Terminal.exe`
+
+### 자동 업데이트 설정 (선택사항)
+
+기본적으로 자동 업데이트는 비활성화되어 있습니다.
+
+```bash
+# .env 파일에 추가
+AUTO_UPDATE=true
+```
+
+활성화 시 Help 메뉴에서 "Check for Updates" 옵션이 표시됩니다.
+
+### 일반적인 빌드 문제
+
+**권한 오류 (EACCES):**
+```bash
+# PowerShell을 관리자 권한으로 실행
+# 또는 개발자 모드 활성화 (설정 > 업데이트 및 보안 > 개발자용)
+```
+
+**코드 서명 오류:**
+```bash
+# 코드 서명 비활성화 (개발용)
+$env:CSC_IDENTITY_AUTO_DISCOVERY="false"
+npm run dist:portable
+```
+
+**캐시 문제:**
+```bash
+# 캐시 삭제 후 재시도
+Remove-Item -Recurse -Force node_modules/.cache
+Remove-Item -Recurse -Force dist
+npm run build
+```
+
+**심볼릭 링크 오류:**
+```bash
+# Windows 개발자 모드 활성화 필요
+# 또는 관리자 권한으로 PowerShell 실행
+```
+
 ## 라이선스
 
 MIT License
@@ -170,6 +258,62 @@ Get-Content "$env:APPDATA\ai-terminal\logs\$(Get-Date -Format 'yyyyMMdd').jsonl"
 # 명령 히스토리 확인
 Get-Content "$env:APPDATA\ai-terminal\history.json" | ConvertFrom-Json
 ```
+
+## 빌드 및 배포
+
+### 개발 빌드
+
+```powershell
+# 개발 모드 실행
+npm run dev
+
+# 프로덕션 모드 실행
+npm run start:prod
+```
+
+### Windows 배포 패키지 생성
+
+```powershell
+# 포터블 실행 파일 생성 (코드 서명 없음)
+npm run dist:portable
+
+# NSIS 인스톨러 생성 (코드 서명 필요)
+npm run dist:win
+```
+
+생성된 파일:
+- **포터블 앱**: `dist/release/win-unpacked/AI Terminal.exe` (158MB)
+- **NSIS 인스톨러**: `dist/release/AI Terminal Setup 0.8.0.exe` (코드 서명 시)
+
+### 자동 업데이트
+
+프로덕션 빌드에서는 GitHub Releases를 통한 자동 업데이트를 지원합니다:
+
+```javascript
+// 환경 변수로 제어
+AUTO_UPDATE=true npm run start:prod
+```
+
+자동 업데이트 기능:
+- GitHub Releases API 연동
+- 백그라운드 다운로드
+- 재시작 후 업데이트 적용
+- Help 메뉴에서 수동 확인 가능
+
+### 빌드 요구사항
+
+- **Node.js**: 18.x 이상
+- **npm**: 9.x 이상
+- **운영체제**: Windows 10/11 x64
+- **코드 서명** (선택): 인증서 파일 (.p12) 및 비밀번호
+
+### 배포 구성
+
+`electron-builder.yml`에서 설정:
+- **앱 ID**: `com.lisyoen.ai-terminal`
+- **출력 디렉터리**: `dist/release`
+- **대상 플랫폼**: Windows x64
+- **압축**: 7z (최대 압축)
 
 ## 버전 히스토리
 

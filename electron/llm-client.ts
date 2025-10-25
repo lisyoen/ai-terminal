@@ -1,32 +1,70 @@
 import type { SnapshotReady, LlmSuggestion } from '../types/messages'
+import { LlmContextManager } from './llm-context'
+import { LlmCache } from './llm-cache'
 
 export class LlmClient {
   private apiUrl: string
   private apiKey?: string
   private model: string
+  private contextManager: LlmContextManager
+  private cache: LlmCache
 
   constructor(apiUrl?: string, apiKey?: string, model?: string) {
     this.apiUrl = apiUrl || process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1'
     this.apiKey = apiKey || process.env.OPENAI_API_KEY
     this.model = model || process.env.OPENAI_MODEL || 'gpt-4o-mini'
+    this.contextManager = new LlmContextManager()
+    this.cache = new LlmCache()
   }
 
-  async sendSnapshot(snapshot: SnapshotReady): Promise<LlmSuggestion> {
+  async sendSnapshot(snapshot: SnapshotReady, context?: string): Promise<LlmSuggestion> {
     try {
+      // Add snapshot to context
+      this.contextManager.addSnapshot(snapshot)
+      
+      // Check cache first
+      const contextForLlm = context || this.contextManager.getContextForLlm()
+      const cacheKey = this.cache.generateKey(snapshot.tail, contextForLlm)
+      
+      const cached = this.cache.get(cacheKey)
+      if (cached) {
+        console.log('LLM: Using cached suggestion')
+        return cached
+      }
+
       // Check if API key is available
       if (!this.apiKey) {
         console.warn('No OpenAI API key found, using mock suggestions')
-        return this.getMockSuggestion(snapshot)
+        const mockSuggestion = this.getMockSuggestion(snapshot)
+        this.cache.set(cacheKey, mockSuggestion)
+        return mockSuggestion
       }
       
       // Try real API call
       const response = await this.callLlmApi(snapshot)
-      return this.parseLlmResponse(response, snapshot.id)
+      const suggestion = this.parseLlmResponse(response, snapshot.id)
+      
+      // Cache the result
+      this.cache.set(cacheKey, suggestion)
+      return suggestion
       
     } catch (error) {
       console.error('LLM API call failed:', error)
-      return this.getMockSuggestion(snapshot)
+      const mockSuggestion = this.getMockSuggestion(snapshot)
+      return mockSuggestion
     }
+  }
+
+  addCommandExecution(commandId: string, command: string, output: string, exitCode?: number) {
+    this.contextManager.addCommandExecution(commandId, command, output, exitCode)
+  }
+
+  getContextManager(): LlmContextManager {
+    return this.contextManager
+  }
+
+  getCacheStats() {
+    return this.cache.getStats()
   }
 
   private async callLlmApi(snapshot: SnapshotReady): Promise<any> {

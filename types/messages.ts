@@ -42,6 +42,16 @@ export const LlmSuggestionSchema = z.object({
   commands: z.array(z.string())
 })
 
+export const GroupedLlmSuggestionSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  suggestions: z.object({
+    next_steps: z.array(z.string()),
+    error_resolution: z.array(z.string()),
+    information_gathering: z.array(z.string())
+  })
+})
+
 export const ErrorSchema = z.object({
   id: z.string(),
   message: z.string()
@@ -54,6 +64,7 @@ export type SnapshotSummary = z.infer<typeof SnapshotSummarySchema>
 export type Redaction = z.infer<typeof RedactionSchema>
 export type SnapshotReady = z.infer<typeof SnapshotReadySchema>
 export type LlmSuggestion = z.infer<typeof LlmSuggestionSchema>
+export type GroupedLlmSuggestion = z.infer<typeof GroupedLlmSuggestionSchema>
 export type ErrorMessage = z.infer<typeof ErrorSchema>
 
 // IPC Channel names
@@ -71,5 +82,6 @@ export const validateMessage = {
   terminalChunk: (data: unknown): TerminalChunk => TerminalChunkSchema.parse(data),
   snapshotReady: (data: unknown): SnapshotReady => SnapshotReadySchema.parse(data),
   llmSuggestion: (data: unknown): LlmSuggestion => LlmSuggestionSchema.parse(data),
+  groupedLlmSuggestion: (data: unknown): GroupedLlmSuggestion => GroupedLlmSuggestionSchema.parse(data),
   error: (data: unknown): ErrorMessage => ErrorSchema.parse(data)
 }
