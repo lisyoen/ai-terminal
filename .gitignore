@@ -9,6 +9,7 @@ dist/
 build/
 release/
 out/
+.vite/
 
 # Runtime data
 pids
