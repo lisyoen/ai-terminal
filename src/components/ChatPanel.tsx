@@ -1,379 +1,262 @@
-import { useState, useRef, useEffect } from 'react'
-import type { SnapshotReady, LlmSuggestion, ErrorMessage } from '../../types/messages'
-import { IpcBridge } from '../ipc-bridge'
+import React, { useEffect, useState } from 'react'
 
-interface ChatPanelProps {
-  onRunCommand: (command: string, target?: string) => void
-  snapshots: SnapshotReady[]
-  suggestions: LlmSuggestion[]
-  errors: ErrorMessage[]
-  isExecuting?: boolean
+/** ===== window.ai 전역 타입 선언 (이 파일에서만 적용) ===== */
+declare global {
+  interface Window {
+    ai: {
+      request: (channel: string, ...args: any[]) => Promise<any>;
+      on?: (channel: string, listener: (payload: any) => void) => () => void;
+      off?: (channel: string, listener: (payload: any) => void) => void;
+      list?: () => { invoke: string[]; events: string[] };
+    };
+  }
 }
+// 모듈로 인식시키기 위한 공백 export
+export {}
 
-interface Message {
+interface CommandHistoryItem {
   id: string
-  type: 'user' | 'system' | 'suggestion' | 'error'
-  content: string
-  timestamp: Date
-  commands?: string[]
+  command: string
+  timestamp: string
+  exitCode?: number
 }
 
-interface Toast {
+interface LlmSuggestion {
   id: string
-  message: string
-  type: 'success' | 'error' | 'info'
-  duration: number
+  title: string
+  commands: string[]
 }
 
-function ChatPanel({ onRunCommand, snapshots, suggestions, errors, isExecuting = false }: ChatPanelProps) {
-  const [messages, setMessages] = useState<Message[]>([])
-  const [inputValue, setInputValue] = useState('')
-  const [isExpanded, setIsExpanded] = useState(false)
-  const [target, setTarget] = useState('local')
-  const [sshTarget, setSshTarget] = useState('')
-  const [recentCommands, setRecentCommands] = useState<any[]>([])
-  const [showHistory, setShowHistory] = useState(false)
-  const [toasts, setToasts] = useState<Toast[]>([])
-  const messagesEndRef = useRef<HTMLDivElement>(null)
+export default function ChatPanel() {
+  const [history, setHistory] = useState<CommandHistoryItem[]>([])
+  const [input, setInput] = useState('')
+  const [output, setOutput] = useState<string[]>([])
+  const [aiSuggestions, setAiSuggestions] = useState<LlmSuggestion[]>([])
 
-  // Convert snapshots to messages and show toast
+  /** 초기 진입 시 최근 히스토리 5개 로드 */
   useEffect(() => {
-    const newMessages: Message[] = snapshots.map(snapshot => ({
-      id: `snapshot-${snapshot.id}`,
-      type: 'system',
-      content: `[${snapshot.trigger}] ${snapshot.summary.exitCode !== undefined ? 
-        `Exit code: ${snapshot.summary.exitCode}, ` : ''}${snapshot.summary.elapsedMs}ms, ${snapshot.summary.bytes} bytes`,
-      timestamp: new Date(),
-      commands: []
-    }))
-
-    setMessages((prev: Message[]) => [...prev, ...newMessages].slice(-50)) // Keep last 50 messages
-    
-    // Show toast for new snapshots
-    if (newMessages.length > 0) {
-      addToast('결과 저장됨', 'success', 2000)
-    }
-  }, [snapshots])
-
-  // Convert suggestions to messages
-  useEffect(() => {
-    const newMessages: Message[] = suggestions.map(suggestion => ({
-      id: `suggestion-${suggestion.id}`,
-      type: 'suggestion',
-      content: suggestion.title,
-      timestamp: new Date(),
-      commands: suggestion.commands
-    }))
-
-    setMessages((prev: Message[]) => [...prev, ...newMessages].slice(-50))
-  }, [suggestions])
-
-  // Convert errors to messages
-  useEffect(() => {
-    const newMessages: Message[] = errors.map(error => ({
-      id: `error-${error.id}`,
-      type: 'error',
-      content: error.message,
-      timestamp: new Date(),
-      commands: []
-    }))
-
-    setMessages((prev: Message[]) => [...prev, ...newMessages].slice(-50))
-  }, [errors])
-
-  // Scroll to bottom when new messages arrive
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
-
-  // Load recent commands on mount
-  useEffect(() => {
-    loadRecentCommands()
+    (async () => {
+      try {
+        const recent = await window.ai.request('history:recent', 5)
+        setHistory(Array.isArray(recent) ? recent : [])
+      } catch (err) {
+        console.error('Failed to load history:', err)
+      }
+    })()
   }, [])
 
-  const addToast = (message: string, type: Toast['type'], duration: number = 3000) => {
-    const id = `toast-${Date.now()}`
-    const toast: Toast = { id, message, type, duration }
-    
-    setToasts(prev => [...prev, toast])
-    
-    setTimeout(() => {
-      setToasts(prev => prev.filter(t => t.id !== id))
-    }, duration)
-  }
+  /** LLM 제안 수신 리스너 */
+  useEffect(() => {
+    if (!window.ai.on) return
 
-  const loadRecentCommands = async () => {
+    const handleLlmSuggestion = (suggestion: LlmSuggestion) => {
+      console.log('[LLM_SUGGESTION]', suggestion)
+      setOutput(prev => [...prev, `[AI] ${suggestion.title || 'Suggestion received'}`])
+      setAiSuggestions(prev => [...prev.slice(-4), suggestion]) // Keep last 5
+    }
+
+    const cleanup = window.ai.on('llm:suggestion', handleLlmSuggestion)
+    return cleanup
+  }, [])
+
+  /** 명령 실행 (로컬 PowerShell) */
+  const handleRun = async () => {
+    const cmd = input.trim()
+    if (!cmd) return
+
+    const id = 'ui-' + Date.now()
+    setOutput(prev => [...prev, `> ${cmd}`])
+
     try {
-      const commands = await IpcBridge.getRecentCommands(10)
-      setRecentCommands(commands)
-    } catch (error) {
-      console.error('Failed to load recent commands:', error)
+      await window.ai.request('run', { id, target: 'local', cwd: null, cmd, mode: 'raw' })
+      const recent = await window.ai.request('history:recent', 5)
+      setHistory(Array.isArray(recent) ? recent : [])
+    } catch (e) {
+      setOutput(prev => [...prev, `ERROR: ${(e as any)?.message ?? e}`])
+    } finally {
+      setInput('')
     }
   }
 
-  const handleHistoryCommand = (command: string) => {
-    setInputValue(command)
-    setShowHistory(false)
-  }
+  /** ===== 스타일 (엄격한 React.CSSProperties 타입 사용) ===== */
+  const s = {
+    container: {
+      display: 'flex',
+      flexDirection: 'column' as React.CSSProperties['flexDirection'],
+      height: '100%',
+      background: '#1e1e1e',
+      color: '#eee'
+    } satisfies React.CSSProperties,
 
-  const handleKeyDown = async (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'ArrowUp' && e.ctrlKey) {
-      e.preventDefault()
-      try {
-        const previousCommand = await IpcBridge.getPreviousCommand(inputValue)
-        if (previousCommand) {
-          setInputValue(previousCommand)
-        }
-      } catch (error) {
-        console.error('Failed to get previous command:', error)
-      }
-    } else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-      handleSubmit(e)
-    }
-  }
+    historyBox: {
+      borderBottom: '1px solid #333',
+      padding: '8px 12px',
+      background: '#252525'
+    } satisfies React.CSSProperties,
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!inputValue.trim()) return
+    historyTitle: {
+      fontWeight: 600,
+      marginBottom: 4
+    } satisfies React.CSSProperties,
 
-    // Add user message
-    const userMessage: Message = {
-      id: `user-${Date.now()}`,
-      type: 'user',
-      content: inputValue,
-      timestamp: new Date(),
-      commands: []
-    }
+    historyItem: {
+      cursor: 'pointer',
+      padding: '2px 0',
+      fontSize: 13,
+      color: '#ccc'
+    } satisfies React.CSSProperties,
 
-    setMessages((prev: Message[]) => [...prev, userMessage])
+    body: {
+      flex: 1,
+      overflow: 'auto',
+      padding: '10px 12px',
+      fontFamily: 'Consolas, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+      fontSize: 13 as React.CSSProperties['fontSize']
+    } satisfies React.CSSProperties,
 
-    // Check if the input contains code blocks or commands
-    const codeBlocks = extractCodeBlocks(inputValue)
-    if (codeBlocks.length > 0) {
-      // Add system message with executable commands
-      const systemMessage: Message = {
-        id: `system-${Date.now()}`,
-        type: 'system',
-        content: `Found ${codeBlocks.length} command${codeBlocks.length > 1 ? 's' : ''}:`,
-        timestamp: new Date(),
-        commands: codeBlocks
-      }
-      setMessages((prev: Message[]) => [...prev, systemMessage])
-    }
+    inputSection: {
+      borderTop: '1px solid #2a2a2a',
+      padding: '10px 12px'
+    } satisfies React.CSSProperties,
 
-    setInputValue('')
-  }
+    inputForm: {
+      display: 'grid',
+      gridTemplateColumns: '1fr auto',
+      gap: 8,
+      alignItems: 'center'
+    } satisfies React.CSSProperties,
 
-  const extractCodeBlocks = (text: string): string[] => {
-    const codeBlockRegex = /```(?:bash|sh|powershell|cmd)?\n?([\s\S]*?)```/g
-    const inlineCodeRegex = /`([^`]+)`/g
-    const commands: string[] = []
-    
-    let match
-    
-    // Extract code blocks
-    while ((match = codeBlockRegex.exec(text)) !== null) {
-      const code = match[1].trim()
-      if (code) {
-        commands.push(...code.split('\n').filter(line => line.trim()))
-      }
-    }
-    
-    // Extract inline code if no code blocks found
-    if (commands.length === 0) {
-      while ((match = inlineCodeRegex.exec(text)) !== null) {
-        const code = match[1].trim()
-        if (code && code.includes(' ') && !code.includes('@') && !code.includes('.')) {
-          // Simple heuristic: if it contains spaces and isn't an email/filename, might be a command
-          commands.push(code)
-        }
-      }
-    }
-    
-    return commands
-  }
+    textarea: {
+      resize: 'vertical' as React.CSSProperties['resize'],
+      minHeight: 56,
+      maxHeight: 160,
+      background: '#2a2a2a',
+      color: '#eee',
+      border: 'none',
+      padding: '8px',
+      borderRadius: 4
+    } satisfies React.CSSProperties,
 
-  const handleRunCommandClick = (command: string) => {
-    const executionTarget = target === 'ssh' ? `ssh://${sshTarget}` : undefined
-    onRunCommand(command, executionTarget)
-    
-    // Add confirmation message
-    const confirmMessage: Message = {
-      id: `confirm-${Date.now()}`,
-      type: 'system',
-      content: `Executing on ${target === 'ssh' ? `SSH ${sshTarget}` : 'local'}: ${command}`,
-      timestamp: new Date(),
-      commands: []
-    }
-    setMessages((prev: Message[]) => [...prev, confirmMessage])
-  }
+    runButton: {
+      background: '#007acc',
+      color: '#fff',
+      border: 'none',
+      borderRadius: 4,
+      padding: '8px 16px',
+      cursor: 'pointer'
+    } satisfies React.CSSProperties,
 
-  const formatTimestamp = (date: Date): string => {
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-  }
+    aiSuggestionsBox: {
+      borderTop: '1px solid #333',
+      padding: '8px 12px',
+      background: '#2a2a2a',
+      maxHeight: '150px',
+      overflow: 'auto'
+    } satisfies React.CSSProperties,
 
-  const getMessageClassName = (type: Message['type']): string => {
-    const baseClass = 'message'
-    switch (type) {
-      case 'user': return `${baseClass} message-user`
-      case 'system': return `${baseClass} message-system`
-      case 'suggestion': return `${baseClass} message-suggestion`
-      case 'error': return `${baseClass} message-error`
-      default: return baseClass
-    }
+    aiTitle: {
+      fontWeight: 600,
+      marginBottom: 8,
+      color: '#9f7aea'
+    } satisfies React.CSSProperties,
+
+    aiSuggestion: {
+      marginBottom: 8,
+      padding: '6px 8px',
+      background: '#333',
+      borderRadius: 4,
+      borderLeft: '3px solid #9f7aea'
+    } satisfies React.CSSProperties,
+
+    aiSuggestionTitle: {
+      fontSize: 12,
+      color: '#ccc',
+      marginBottom: 4
+    } satisfies React.CSSProperties,
+
+    aiCommand: {
+      cursor: 'pointer',
+      padding: '2px 4px',
+      margin: '2px 0',
+      background: '#1e1e1e',
+      borderRadius: 3,
+      fontSize: 12,
+      fontFamily: 'Consolas, monospace',
+      color: '#d7ba7d',
+      border: '1px solid #444'
+    } satisfies React.CSSProperties
   }
 
   return (
-    <div className={`chat-panel ${isExpanded ? 'expanded' : ''}`}>
-      <div className="chat-header">
-        <h2>AI Assistant</h2>
-        {isExecuting && (
-          <div className="loading-indicator">
-            <div className="spinner"></div>
-            <span>Executing...</span>
-          </div>
+    <div style={s.container}>
+      {/* === 히스토리 패널 === */}
+      <div style={s.historyBox}>
+        <div style={s.historyTitle}>Recent Commands</div>
+        {history.length === 0 ? (
+          <div style={{ color: '#666', fontSize: 12 }}>No history yet</div>
+        ) : (
+          history.map(item => (
+            <div
+              key={item.id}
+              style={s.historyItem}
+              onClick={() => setInput(item.command)}
+              title={`Exit ${item.exitCode ?? '-'} | ${item.timestamp}`}
+            >
+              {item.command}
+            </div>
+          ))
         )}
-        <button 
-          className="expand-button"
-          onClick={() => setIsExpanded(!isExpanded)}
-        >
-          {isExpanded ? '⬅' : '➡'}
-        </button>
       </div>
 
-      <div className="target-selector">
-        <label>
-          <strong>Target:</strong>
-        </label>
-        <div className="target-options">
-          <label className="target-option">
-            <input
-              type="radio"
-              name="target"
-              value="local"
-              checked={target === 'local'}
-              onChange={(e) => setTarget(e.target.value)}
-            />
-            Local PowerShell
-          </label>
-          <label className="target-option">
-            <input
-              type="radio"
-              name="target"
-              value="ssh"
-              checked={target === 'ssh'}
-              onChange={(e) => setTarget(e.target.value)}
-            />
-            SSH Remote
-          </label>
-        </div>
-        {target === 'ssh' && (
-          <div className="ssh-input">
-            <input
-              type="text"
-              placeholder="user@hostname"
-              value={sshTarget}
-              onChange={(e) => setSshTarget(e.target.value)}
-              className="ssh-target-input"
-            />
-          </div>
-        )}
-      </div>
-      
-      <div className="chat-messages">
-        {messages.map((message: Message) => (
-          <div key={message.id} className={getMessageClassName(message.type)}>
-            <div className="message-header">
-              <span className="message-type">{message.type}</span>
-              <span className="message-time">{formatTimestamp(message.timestamp)}</span>
-            </div>
-            <div className="message-content">
-              {message.content}
-            </div>
-            {message.commands && message.commands.length > 0 && (
-              <div className="message-commands">
-                {message.commands.map((command, index) => (
-                  <div key={index} className="command-item">
-                    <code className="command-text">{command}</code>
-                    <button 
-                      className="run-button"
-                      onClick={() => handleRunCommandClick(command)}
-                      title={`Run on ${target === 'ssh' ? `SSH ${sshTarget}` : 'local'}`}
-                      disabled={isExecuting || (target === 'ssh' && !sshTarget)}
-                    >
-                      ▶
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+      {/* === 출력 영역 === */}
+      <div style={s.body}>
+        {output.map((line, i) => (
+          <div key={i}>{line}</div>
         ))}
-        <div ref={messagesEndRef} />
       </div>
-      
-      <div className="chat-input-section">
-        <div className="input-controls">
-          <button
-            type="button"
-            className="history-button"
-            onClick={() => setShowHistory(!showHistory)}
-            title="Command History (Ctrl+↑ for previous)"
-          >
-            📝
-          </button>
-          {showHistory && (
-            <div className="history-dropdown">
-              <div className="history-header">Recent Commands</div>
-              {recentCommands.length > 0 ? (
-                recentCommands.map((cmd, index) => (
-                  <div 
-                    key={index} 
-                    className="history-item"
-                    onClick={() => handleHistoryCommand(cmd.command)}
-                  >
-                    <div className="history-command">{cmd.command}</div>
-                    <div className="history-meta">
-                      {cmd.target} • {new Date(cmd.timestamp).toLocaleTimeString()}
-                      {cmd.exitCode !== undefined && ` • exit ${cmd.exitCode}`}
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="history-empty">No recent commands</div>
-              )}
+
+      {/* === AI 제안 영역 === */}
+      {aiSuggestions.length > 0 && (
+        <div style={s.aiSuggestionsBox}>
+          <div style={s.aiTitle}>AI Suggestions</div>
+          {aiSuggestions.map((suggestion, index) => (
+            <div key={suggestion.id || index} style={s.aiSuggestion}>
+              <div style={s.aiSuggestionTitle}>{suggestion.title}</div>
+              {suggestion.commands?.map((command, cmdIndex) => (
+                <div
+                  key={cmdIndex}
+                  style={s.aiCommand}
+                  onClick={() => setInput(command)}
+                  title="Click to copy to input"
+                >
+                  {command}
+                </div>
+              ))}
             </div>
-          )}
+          ))}
         </div>
-        
-        <form className="chat-input" onSubmit={handleSubmit}>
+      )}
+
+      {/* === 입력창 === */}
+      <div style={s.inputSection}>
+        <form
+          style={s.inputForm}
+          onSubmit={e => {
+            e.preventDefault()
+            handleRun()
+          }}
+        >
           <textarea
-            value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
-            placeholder="Ask a question or paste commands... (Ctrl+↑ for history)"
-            rows={3}
-            disabled={isExecuting}
-            onKeyDown={handleKeyDown}
+            style={s.textarea}
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            placeholder="Enter command and press Run (Ctrl+Enter to submit in future enhancements)"
           />
-          <button 
-            type="submit" 
-            disabled={!inputValue.trim() || isExecuting}
-          >
-            {isExecuting ? 'Executing...' : 'Send'}
+          <button style={s.runButton} type="submit">
+            Run
           </button>
         </form>
-      </div>
-
-      {/* Toast notifications */}
-      <div className="toast-container">
-        {toasts.map(toast => (
-          <div key={toast.id} className={`toast toast-${toast.type}`}>
-            {toast.message}
-          </div>
-        ))}
       </div>
     </div>
   )
 }
-
-export default ChatPanel

@@ -1,45 +1,45 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer } from 'electron';
 
-// Expose protected methods that allow the renderer process to use
-// the ipcRenderer without exposing the entire object
+// 허용된 IPC 채널 목록 정의
+const VALID_CHANNELS = [
+  'run',
+  'terminal:chunk',
+  'snapshot:ready',
+  'llm:suggestion',
+  'error',
+  'history:recent',
+  'history:search',
+  'history:previous'
+];
+
+// window.ai 네임스페이스 노출
 contextBridge.exposeInMainWorld('ai', {
-  request: (channel: string, payload?: any) => {
-    // Whitelist channels
-    const validChannels = ['run']
-    if (validChannels.includes(channel)) {
-      return ipcRenderer.invoke(channel, payload)
+  // 메인 프로세스로 메시지 보내기 (request-response)
+  request: (channel: string, ...args: any[]) => {
+    if (!VALID_CHANNELS.includes(channel)) {
+      throw new Error(`Invalid channel: ${channel}`);
     }
-    throw new Error(`Invalid channel: ${channel}`)
+    return ipcRenderer.invoke(channel, ...args);
   },
 
-  // Subscribe to events
-  on: (channel: string, callback: (...args: any[]) => void) => {
-    const validChannels = ['terminal:chunk', 'snapshot:ready', 'llm:suggestion', 'error']
-    if (validChannels.includes(channel)) {
-      ipcRenderer.on(channel, (_event, ...args) => callback(...args))
-    } else {
-      throw new Error(`Invalid channel: ${channel}`)
+  // 메인 → 렌더러 이벤트 수신
+  on: (channel: string, func: (...args: any[]) => void) => {
+    if (!VALID_CHANNELS.includes(channel)) {
+      return () => {}; // 빈 cleanup 함수 반환
     }
+    
+    const listener = (_event: any, ...args: any[]) => func(...args);
+    ipcRenderer.on(channel, listener);
+    
+    // cleanup 함수 반환
+    return () => {
+      ipcRenderer.removeListener(channel, listener);
+    };
   },
 
-  // Remove event listeners
-  off: (channel: string, callback: (...args: any[]) => void) => {
-    const validChannels = ['terminal:chunk', 'snapshot:ready', 'llm:suggestion', 'error']
-    if (validChannels.includes(channel)) {
-      ipcRenderer.removeListener(channel, callback)
-    } else {
-      throw new Error(`Invalid channel: ${channel}`)
-    }
+  // 리스너 제거
+  off: (channel: string, func: (...args: any[]) => void) => {
+    if (!VALID_CHANNELS.includes(channel)) return;
+    ipcRenderer.removeListener(channel, func);
   }
-})
-
-// Type declaration for the exposed API
-declare global {
-  interface Window {
-    ai: {
-      request: (channel: string, payload?: any) => Promise<any>
-      on: (channel: string, callback: (...args: any[]) => void) => void
-      off: (channel: string, callback: (...args: any[]) => void) => void
-    }
-  }
-}
+});

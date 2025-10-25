@@ -1,268 +1,120 @@
-import { app, BrowserWindow, ipcMain, Menu } from 'electron'
-import { join } from 'path'
-import { validateMessage } from '../types/messages'
-import { TerminalManager } from './terminal'
+/* electron/main.ts
+   Electron Main Process Entry
+   - preload는 import하지 않는다! (preload.ts는 별도 번들로 실행됨)
+   - BrowserWindow.webPreferences.preload 경로만 설정
+*/
 
-const isDev = process.env.NODE_ENV === 'development'
-const autoUpdateEnabled = process.env.AUTO_UPDATE === 'true'
-
-// Optional auto-updater import
-let autoUpdater: any = null
-if (autoUpdateEnabled && !isDev) {
-  try {
-    const { autoUpdater: updater } = require('electron-updater')
-    autoUpdater = updater
-  } catch (error) {
-    console.warn('electron-updater not available:', error)
-  }
-}
+import { app, BrowserWindow, ipcMain } from 'electron';
+import * as path from 'path';
+import { TerminalManager } from './terminal';
 
 class App {
-  private mainWindow: BrowserWindow | null = null
-  private terminalManager: TerminalManager
+  private mainWindow: BrowserWindow | null = null;
+  private terminalManager: TerminalManager;
 
   constructor() {
-    this.terminalManager = new TerminalManager()
-    this.setupApp()
-    this.setupIPC()
-    this.setupAutoUpdater()
+    this.terminalManager = new TerminalManager();
+    this.registerIpcHandlers();
+    this.forwardTerminalEvents();
   }
 
-  private setupApp() {
-    // Quit when all windows are closed, except on macOS
-    app.on('window-all-closed', () => {
-      if (process.platform !== 'darwin') {
-        app.quit()
-      }
-    })
+  async init() {
+    await app.whenReady();
+    this.createWindow();
 
     app.on('activate', () => {
-      // On macOS, re-create a window in the app when the dock icon is clicked
       if (BrowserWindow.getAllWindows().length === 0) {
-        this.createWindow()
+        this.createWindow();
       }
-    })
+    });
 
-    app.whenReady().then(() => {
-      this.createWindow()
-      this.setupMenu()
-    })
+    app.on('window-all-closed', () => {
+      // Windows에서도 모든 창 닫히면 종료
+      app.quit();
+    });
   }
 
   private createWindow() {
+    // __dirname = dist/electron/electron
+    const preloadPath = path.join(__dirname, 'preload.js');
+
     this.mainWindow = new BrowserWindow({
       width: 1200,
       height: 800,
       webPreferences: {
-        preload: join(__dirname, 'preload.js'),
-        nodeIntegration: false,
+        preload: preloadPath,
         contextIsolation: true,
-        sandbox: false // Required for node-pty
-      }
-    })
+        nodeIntegration: false,
+      },
+      show: true,
+    });
 
-    // Load the app
-    if (process.env.VITE_DEV_SERVER_URL) {
-      this.mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL)
-      // DevTools can be opened manually with F12 or Ctrl+Shift+I
-      // this.mainWindow.webContents.openDevTools()
+    const devUrl = process.env.VITE_DEV_SERVER_URL;
+    if (devUrl && devUrl.startsWith('http')) {
+      this.mainWindow.loadURL(devUrl);
+      // 개발 모드에서만 자동 오픈(필요 시 주석 해제)
+      // this.mainWindow.webContents.openDevTools({ mode: 'detach' });
     } else {
-      this.mainWindow.loadFile(join(__dirname, '../index.html'))
+      // dist/electron/electron → ../../index.html = dist/index.html
+      const indexHtml = path.join(__dirname, '../../index.html');
+      this.mainWindow.loadFile(indexHtml);
+      // 프로덕션에선 DevTools 자동 열지 않음
     }
-
-    this.mainWindow.on('closed', () => {
-      this.mainWindow = null
-    })
   }
 
-  private setupIPC() {
-    // Handle run command requests (local or SSH)
-    ipcMain.handle('run', async (_event, data) => {
-      try {
-        const request = validateMessage.runRequest(data)
-        
-        let response
-        if (request.target && request.target.startsWith('ssh://')) {
-          // SSH execution
-          response = await this.terminalManager.runSshSingleShot(request)
-        } else {
-          // Local execution
-          response = await this.terminalManager.executeCommand(request)
-        }
-        
-        return response
-      } catch (error) {
-        console.error('Error in run handler:', error)
-        return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+  private registerIpcHandlers() {
+    // 실행 요청
+    ipcMain.handle('run', async (_evt, request) => {
+      // request.target 이 ssh:// 로 시작하면 SSH 단발 실행, 아니면 로컬 실행
+      if (typeof request?.target === 'string' && /^ssh:\/\//i.test(request.target)) {
+        return this.terminalManager.runSshSingleShot(request);
       }
-    })
+      return this.terminalManager.executeCommand(request);
+    });
 
-    // Handle command history requests
-    ipcMain.handle('history:recent', async (_, limit: number = 20) => {
-      try {
-        return this.terminalManager.getRecentCommands(limit)
-      } catch (error) {
-        console.error('Error getting recent commands:', error)
-        return []
+    // 히스토리: 최근
+    ipcMain.handle('history:recent', async (_evt, limit: number = 20) => {
+      return this.terminalManager.getRecentCommands(limit);
+    });
+
+    // 히스토리: 검색
+    ipcMain.handle('history:search', async (_evt, query: string, limit: number = 10) => {
+      return this.terminalManager.searchCommands(query, limit);
+    });
+
+    // 히스토리: 이전 명령
+    ipcMain.handle('history:previous', async (_evt, currentCommand: string) => {
+      return this.terminalManager.getPreviousCommand(currentCommand);
+    });
+  }
+
+  private forwardTerminalEvents() {
+    const send = (channel: string, payload: any) => {
+      if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+        this.mainWindow.webContents.send(channel, payload);
       }
-    })
+    };
 
-    ipcMain.handle('history:search', async (_, query: string, limit: number = 10) => {
-      try {
-        return this.terminalManager.searchCommands(query, limit)
-      } catch (error) {
-        console.error('Error searching commands:', error)
-        return []
-      }
-    })
-
-    ipcMain.handle('history:previous', async (_, currentCommand: string = '') => {
-      try {
-        return this.terminalManager.getPreviousCommand(currentCommand)
-      } catch (error) {
-        console.error('Error getting previous command:', error)
-        return null
-      }
-    })
-
-    // Set up terminal output forwarding
     this.terminalManager.on('output', (chunk) => {
-      if (this.mainWindow) {
-        this.mainWindow.webContents.send('terminal:chunk', chunk)
-      }
-    })
+      send('terminal:chunk', chunk);
+    });
 
     this.terminalManager.on('snapshot', (snapshot) => {
-      if (this.mainWindow) {
-        this.mainWindow.webContents.send('snapshot:ready', snapshot)
-      }
-    })
+      send('snapshot:ready', snapshot);
+    });
 
     this.terminalManager.on('llmSuggestion', (suggestion) => {
-      if (this.mainWindow) {
-        this.mainWindow.webContents.send('llm:suggestion', suggestion)
-      }
-    })
+      send('llm:suggestion', suggestion);
+    });
 
-    this.terminalManager.on('error', (error) => {
-      if (this.mainWindow) {
-        this.mainWindow.webContents.send('error', error)
-      }
-    })
-  }
-
-  private setupMenu() {
-    const template: any[] = [
-      {
-        label: 'File',
-        submenu: [
-          {
-            label: 'Quit',
-            accelerator: process.platform === 'darwin' ? 'Cmd+Q' : 'Ctrl+Q',
-            click: () => {
-              app.quit()
-            }
-          }
-        ]
-      },
-      {
-        label: 'View',
-        submenu: [
-          {
-            label: 'Reload',
-            accelerator: 'CmdOrCtrl+R',
-            click: (item: any, focusedWindow: BrowserWindow) => {
-              if (focusedWindow) focusedWindow.reload()
-            }
-          },
-          {
-            label: 'Toggle Developer Tools',
-            accelerator: process.platform === 'darwin' ? 'Alt+Cmd+I' : 'Ctrl+Shift+I',
-            click: (item: any, focusedWindow: BrowserWindow) => {
-              if (focusedWindow) focusedWindow.webContents.toggleDevTools()
-            }
-          }
-        ]
-      },
-      {
-        label: 'Help',
-        submenu: [
-          {
-            label: 'About',
-            click: () => {
-              // Show about dialog
-            }
-          }
-        ]
-      }
-    ]
-
-    // Add update menu item if auto-update is enabled
-    if (autoUpdateEnabled && autoUpdater) {
-      template[2].submenu.push({
-        type: 'separator'
-      }, {
-        label: 'Check for Updates...',
-        click: () => {
-          this.checkForUpdates()
-        }
-      })
-    }
-
-    const menu = Menu.buildFromTemplate(template)
-    Menu.setApplicationMenu(menu)
-  }
-
-  private setupAutoUpdater() {
-    if (!autoUpdateEnabled || !autoUpdater || isDev) {
-      console.log('Auto-updater disabled')
-      return
-    }
-
-    // Configure auto-updater
-    autoUpdater.setFeedURL({
-      provider: 'github',
-      owner: 'lisyoen',
-      repo: 'ai-terminal',
-      private: false
-    })
-
-    // Auto-updater events
-    autoUpdater.on('checking-for-update', () => {
-      console.log('Checking for update...')
-    })
-
-    autoUpdater.on('update-available', (info: any) => {
-      console.log('Update available:', info)
-    })
-
-    autoUpdater.on('update-not-available', (info: any) => {
-      console.log('Update not available:', info)
-    })
-
-    autoUpdater.on('error', (err: any) => {
-      console.error('Error in auto-updater:', err)
-    })
-
-    autoUpdater.on('download-progress', (progressObj: any) => {
-      let log_message = "Download speed: " + progressObj.bytesPerSecond
-      log_message = log_message + ' - Downloaded ' + progressObj.percent + '%'
-      log_message = log_message + ' (' + progressObj.transferred + "/" + progressObj.total + ')'
-      console.log(log_message)
-    })
-
-    autoUpdater.on('update-downloaded', (info: any) => {
-      console.log('Update downloaded:', info)
-      autoUpdater.quitAndInstall()
-    })
-  }
-
-  private checkForUpdates() {
-    if (autoUpdater) {
-      autoUpdater.checkForUpdatesAndNotify()
-    }
+    this.terminalManager.on('error', (err) => {
+      send('error', { message: String(err?.message || err) });
+    });
   }
 }
 
-// Create the app instance
-new App()
+const appInstance = new App();
+appInstance.init().catch((err) => {
+  // eslint-disable-next-line no-console
+  console.error('[Main] Failed to initialize app:', err);
+});

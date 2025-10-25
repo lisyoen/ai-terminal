@@ -1,33 +1,31 @@
 {
   "compilerOptions": {
     "target": "ES2020",
-    "useDefineForClassFields": true,
-    "lib": ["ES2020", "DOM", "DOM.Iterable"],
     "module": "CommonJS",
-    "skipLibCheck": true,
-    "moduleResolution": "node",
-    "allowImportingTsExtensions": false,
-    "resolveJsonModule": true,
-    "isolatedModules": true,
-    "noEmit": false,
-    "outDir": "./dist/electron",
-    "jsx": "react-jsx",
+    "moduleResolution": "Node",
     "strict": true,
-    "noUnusedLocals": false,
-    "noUnusedParameters": false,
-    "noFallthroughCasesInSwitch": true,
-    "allowSyntheticDefaultImports": true,
     "esModuleInterop": true,
-    "forceConsistentCasingInFileNames": true
+    "skipLibCheck": true,
+    "sourceMap": true,
+
+    // === 빌드 산출물 경로 설정 (현재 실행 스크립트가 기대하는 구조 유지) ===
+    "outDir": "./dist/electron",
+    "rootDir": ".",
+
+    // 타입
+    "types": ["node", "electron"]
   },
+
+  // === 중요: electron/preload.ts를 포함시키기 위해 electron/**/*.ts 명시 ===
   "include": [
-    "electron/**/*",
-    "types/**/*"
+    "electron/**/*.ts",
+    "types/**/*.ts"
   ],
+
+  // Vite가 처리하는 렌더러(src)는 tsc에서 제외 (중복 빌드 방지)
   "exclude": [
     "node_modules",
     "dist",
-    "release",
-    "src/**/*"
+    "src"
   ]
 }

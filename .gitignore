@@ -11,6 +11,10 @@ release/
 out/
 .vite/
 
+# Electron cache and build files
+.electron-cache/
+*.asar
+
 # Runtime data
 pids
 *.pid
