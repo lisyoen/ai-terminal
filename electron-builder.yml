@@ -22,30 +22,31 @@ win:
         - x64
   artifactName: "AI-Terminal-${version}-Setup.${ext}"
   legalTrademarks: "lisyoen"
-  sign: false
-  certificateFile: null
-  certificatePassword: null
 nsis:
-  oneClick: true
+  oneClick: false
   perMachine: false
-  allowToChangeInstallationDirectory: false
+  allowToChangeInstallationDirectory: true
+  allowElevation: true
   createDesktopShortcut: true
   createStartMenuShortcut: true
   displayLanguageSelector: false
+  license: "build/license.txt"
   installerLanguages:
     - en_US
     - ko_KR
   warningsAsErrors: false
+  shortcutName: "AI Terminal"
+  menuCategory: true
+  deleteAppDataOnUninstall: false
+  runAfterFinish: false
 portable:
   artifactName: "AI-Terminal-${version}-Portable.${ext}"
 mac:
   target: dmg
 linux:
   target: AppImage
-publish: never   # 자동 배포 비활성화(수동 릴리스)
 compression: normal
 electronDownload:
   cache: .electron-cache
 afterSign: false
-beforeBuild: false
 forceCodeSigning: false

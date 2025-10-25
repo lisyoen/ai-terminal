@@ -80,7 +80,6 @@
       "allowToChangeInstallationDirectory": false,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true
-    },
-    "publish": "never"
+    }
   }
 }

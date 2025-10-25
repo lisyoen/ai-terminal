@@ -1,0 +1,60 @@
+AI Terminal License Agreement
+
+Copyright (c) 2025 AI Terminal Developer (lisyoen)
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+---
+
+Third-Party Components:
+
+This software includes the following third-party components:
+
+1. Electron
+   License: MIT
+   Copyright: GitHub Inc.
+   
+2. React
+   License: MIT
+   Copyright: Facebook Inc.
+   
+3. TypeScript
+   License: Apache License 2.0
+   Copyright: Microsoft Corporation
+   
+4. xterm.js
+   License: MIT
+   Copyright: Microsoft Corporation
+   
+5. Vite
+   License: MIT
+   Copyright: Evan You
+
+By installing and using this software, you agree to comply with the terms
+and conditions of this license agreement and all applicable third-party licenses.
+
+For more information about third-party licenses, please refer to the
+documentation provided with this software or visit the project repository.
+
+---
+
+AI Terminal v0.5.0
+https://github.com/lisyoen/ai-terminal
+
+Last updated: October 25, 2025
