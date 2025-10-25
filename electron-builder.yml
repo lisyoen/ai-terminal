@@ -1,0 +1,14 @@
+appId: com.example.ai-terminal
+productName: AI Terminal
+directories:
+  output: release
+files:
+  - dist/**/*
+  - node_modules/**/*
+  - scripts/**/*
+mac:
+  target: dmg
+win:
+  target: nsis
+linux:
+  target: AppImage
