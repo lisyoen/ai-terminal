@@ -32,10 +32,7 @@ interface GroupedLlmSuggestion {
 }
 
 export default function ChatPanel() {
-  // 자동입력 실행 여부 플래그
-  const [autoInputExecuted, setAutoInputExecuted] = useState(false);
-  
-  // 앱 시작 시 입력창 자동 채움 및 실행 (렌더링 후 1초 뒤 실행)
+  // 히스토리, 입력, 출력 상태
   const [history, setHistory] = useState<CommandHistoryItem[]>([])
   const [input, setInput] = useState('')
   const [output, setOutput] = useState<string[]>([])
@@ -66,82 +63,6 @@ export default function ChatPanel() {
     const cleanup = window.ai.on('llm:suggestion', handleLlmSuggestion)
     return cleanup
   }, [])
-
-  /** 자동입력: 앱 시작 2초 후 입력창에 표시하고 실행 */
-  useEffect(() => {
-    // 이미 실행되었으면 스킵
-    if (autoInputExecuted) {
-      console.log('[자동입력] 이미 실행됨, 스킵');
-      return;
-    }
-    
-    console.log('[ChatPanel] 자동입력 타이머 설정 시작');
-    
-    const timer = setTimeout(() => {
-      const testCmd = '파일 목록 보여줘';
-      console.log('[자동입력] 타이머 작동! 입력창에 표시:', testCmd);
-      
-      // 입력창에 표시
-      setInput(testCmd);
-      console.log('[자동입력] setInput 호출 완료');
-      
-      // 2초 후 실행 (사용자가 볼 수 있도록)
-      setTimeout(async () => {
-        console.log('[자동입력] 명령 실행 시작');
-        try {
-          // 로그 먼저 남기기
-          await window.ai.request('logUserInput', testCmd);
-          console.log('[자동입력] 로그 기록 완료');
-          
-          // GPT를 통해 명령어 변환
-          const llmResponse = await window.ai.request('llm:convert', {
-            userInput: testCmd,
-            context: 'PowerShell 명령 변환'
-          });
-          
-          const id = 'auto-' + Date.now();
-          
-          if (llmResponse && llmResponse.command) {
-            console.log('[자동입력] GPT 변환 완료:', llmResponse.command);
-            await window.ai.request('run', { 
-              id, 
-              target: 'local', 
-              cwd: null, 
-              cmd: llmResponse.command, 
-              mode: 'raw' 
-            });
-          } else {
-            console.log('[자동입력] GPT 변환 실패, 원본 실행');
-            await window.ai.request('run', { 
-              id, 
-              target: 'local', 
-              cwd: null, 
-              cmd: testCmd, 
-              mode: 'raw' 
-            });
-          }
-          console.log('[자동입력] run 요청 완료');
-          
-          // 히스토리 갱신
-          const recent = await window.ai.request('history:recent', 5);
-          setHistory(Array.isArray(recent) ? recent : []);
-          console.log('[자동입력] 히스토리 갱신 완료');
-          
-          // 실행 후 입력창 비우기
-          setInput('');
-          setAutoInputExecuted(true);
-          console.log('[자동입력] 전체 프로세스 완료!');
-        } catch (err) {
-          console.error('[자동입력] 실패:', err);
-        }
-      }, 2000);
-    }, 2000);
-    
-    return () => {
-      console.log('[자동입력] 타이머 정리');
-      clearTimeout(timer);
-    };
-  }, [autoInputExecuted]);
 
   /** 명령 실행 (GPT를 통한 자연어 해석) */
     const handleRun = async (delayClear?: boolean) => {

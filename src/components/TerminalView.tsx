@@ -37,6 +37,8 @@ function TerminalView({ onTargetChange, onCwdChange }: TerminalViewProps) {
       if (chunk?.text) {
         // xterm.js는 자동으로 UTF-8 처리하므로 직접 write
         terminal.write(chunk.text);
+        // 자동 스크롤 - 최신 출력이 항상 보이도록
+        terminal.scrollToBottom();
       }
       const text = chunk.text;
       const cwdMatch = text.match(/^[A-Z]:\\[^>]*>|^[^$]*\$/);
