@@ -55,7 +55,13 @@ export class LlmContextManager extends EventEmitter {
     }
 
     const contextLines = this.contextHistory.map(entry => {
-      const timestamp = new Date(entry.timestamp).toISOString()
+      // KST(UTC+9) timestamp
+      const timestamp = (() => {
+        const now = new Date(entry.timestamp);
+        const kst = new Date(now.getTime() + (9 * 60 * 60 * 1000));
+        const pad = (n: number) => n.toString().padStart(2, '0');
+        return `${kst.getFullYear()}-${pad(kst.getMonth()+1)}-${pad(kst.getDate())} ${pad(kst.getHours())}:${pad(kst.getMinutes())}:${pad(kst.getSeconds())}`;
+      })();
       const status = entry.exitCode !== undefined ? `(exit: ${entry.exitCode})` : ''
       const command = entry.command ? `Command: ${entry.command}` : ''
       

@@ -30,6 +30,7 @@ pids
 .env.production.local
 
 # Development files
+.prompt/
 개발환경_*.prompt.txt
 
 # OS generated files

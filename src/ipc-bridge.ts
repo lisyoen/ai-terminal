@@ -12,39 +12,39 @@ export class IpcBridge {
   }
 
   static onTerminalChunk(callback: (chunk: TerminalChunk) => void): () => void {
-    if (!this.isElectron) {
+    if (!this.isElectron || !window.ai.on || !window.ai.off) {
       return () => {}
     }
 
     window.ai.on('terminal:chunk', callback)
-    return () => window.ai.off('terminal:chunk', callback)
+    return () => window.ai.off!('terminal:chunk', callback)
   }
 
   static onSnapshotReady(callback: (snapshot: SnapshotReady) => void): () => void {
-    if (!this.isElectron) {
+    if (!this.isElectron || !window.ai.on || !window.ai.off) {
       return () => {}
     }
 
     window.ai.on('snapshot:ready', callback)
-    return () => window.ai.off('snapshot:ready', callback)
+    return () => window.ai.off!('snapshot:ready', callback)
   }
 
   static onLlmSuggestion(callback: (suggestion: LlmSuggestion) => void): () => void {
-    if (!this.isElectron) {
+    if (!this.isElectron || !window.ai.on || !window.ai.off) {
       return () => {}
     }
 
     window.ai.on('llm:suggestion', callback)
-    return () => window.ai.off('llm:suggestion', callback)
+    return () => window.ai.off!('llm:suggestion', callback)
   }
 
   static onError(callback: (error: ErrorMessage) => void): () => void {
-    if (!this.isElectron) {
+    if (!this.isElectron || !window.ai.on || !window.ai.off) {
       return () => {}
     }
 
     window.ai.on('error', callback)
-    return () => window.ai.off('error', callback)
+    return () => window.ai.off!('error', callback)
   }
 
   // Command history methods
@@ -70,5 +70,14 @@ export class IpcBridge {
     }
     
     return window.ai.request('history:previous', currentCommand)
+  }
+
+  // LLM command conversion
+  static async convertNaturalLanguageToCommand(userInput: string, context: string = ''): Promise<{command?: string, explanation?: string}> {
+    if (!this.isElectron) {
+      return {}
+    }
+    
+    return window.ai.request('llm:convert', { userInput, context })
   }
 }

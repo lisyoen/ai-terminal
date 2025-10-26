@@ -6,7 +6,7 @@ loadDotenv()
 export const config = {
   // Shell configuration
   DEFAULT_SHELL: 'pwsh',
-  LOCAL_PROMPT_TOKEN: '__AI_PROMPT_LOCAL__',
+  LOCAL_PROMPT_TOKEN: 'PS',
   REMOTE_PROMPT_TOKEN: '__AI_PROMPT_REMOTE__',
   
   // Snapshot configuration

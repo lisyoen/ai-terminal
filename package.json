@@ -10,6 +10,8 @@
     "build": "npm run build:renderer && npm run build:electron",
     "build:electron": "tsc",
     "build:renderer": "vite build",
+    "build:windows": "pwsh ./scripts/build-windows.ps1",
+    "build:windows:clean": "pwsh ./scripts/build-windows.ps1 -Clean",
     "electron": "electron dist/electron/electron/main.js",
     "start": "npm run build && npm run electron",
     "start:prod": "electron dist/electron/electron/main.js",

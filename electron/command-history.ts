@@ -97,12 +97,17 @@ export class CommandHistory {
   }
 
   addCommand(id: string, command: string, target: string = 'local', cwd: string = process.cwd(), exitCode?: number) {
+    // KST(UTC+9) timestamp
+    const now = new Date();
+    const kst = new Date(now.getTime() + (9 * 60 * 60 * 1000));
+    const pad = (n: number) => n.toString().padStart(2, '0');
+    const kstTimestamp = `${kst.getFullYear()}-${pad(kst.getMonth()+1)}-${pad(kst.getDate())} ${pad(kst.getHours())}:${pad(kst.getMinutes())}:${pad(kst.getSeconds())}`;
     const entry: HistoryEntry = {
       id,
       command: command.trim(),
       target,
       cwd,
-      timestamp: new Date().toISOString(),
+      timestamp: kstTimestamp,
       exitCode
     }
 

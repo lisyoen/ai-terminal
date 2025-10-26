@@ -1,9 +1,9 @@
-import type { LlmSuggestion } from '../types/messages'
+import type { GroupedLlmSuggestion } from '../types/messages'
 import { config } from './config'
 
 interface CacheEntry {
   key: string
-  suggestion: LlmSuggestion
+  suggestion: GroupedLlmSuggestion
   timestamp: number
   hits: number
 }
@@ -37,7 +37,7 @@ export class LlmCache {
     return Math.abs(hash).toString(36)
   }
 
-  get(key: string): LlmSuggestion | null {
+  get(key: string): GroupedLlmSuggestion | null {
     const entry = this.cache.get(key)
     
     if (!entry) {
@@ -56,7 +56,7 @@ export class LlmCache {
     return entry.suggestion
   }
 
-  set(key: string, suggestion: LlmSuggestion): void {
+  set(key: string, suggestion: GroupedLlmSuggestion): void {
     const entry: CacheEntry = {
       key,
       suggestion,

@@ -1,5 +1,5 @@
 import { EventEmitter } from 'events'
-import type { SnapshotReady, SnapshotSummary } from '../types/messages'
+import type { SnapshotReady, SnapshotSummary, GroupedLlmSuggestion } from '../types/messages'
 import { Redactor } from './redact'
 import { LlmClient } from './llm-client'
 import { SessionLogger } from './session-logger'

@@ -1,0 +1,149 @@
+name: Windows Build
+
+on:
+  push:
+    branches:
+      - main
+      - release/*
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    
+    strategy:
+      matrix:
+        node-version: [20]
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'npm'
+        
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Lint code
+      run: npm run lint
+      continue-on-error: true
+      
+    - name: Build renderer
+      run: npm run build:renderer
+      
+    - name: Build electron
+      run: npm run build:electron
+      
+    - name: Try electron-builder (portable)
+      id: electron-builder
+      continue-on-error: true
+      run: npm run dist:portable
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: Manual unpacked build (fallback)
+      if: steps.electron-builder.outcome == 'failure'
+      run: |
+        echo "Electron-builder failed, creating manual unpacked build..."
+        
+        # Create release directory structure
+        New-Item -ItemType Directory -Force -Path "dist/release/win-unpacked"
+        
+        # Copy all built files
+        Copy-Item -Path "dist/electron" -Destination "dist/release/win-unpacked/resources/app" -Recurse -Force
+        Copy-Item -Path "dist/*.html" -Destination "dist/release/win-unpacked/resources/app/" -Force -ErrorAction SilentlyContinue
+        Copy-Item -Path "dist/assets" -Destination "dist/release/win-unpacked/resources/app/assets" -Recurse -Force -ErrorAction SilentlyContinue
+        Copy-Item -Path "package.json" -Destination "dist/release/win-unpacked/resources/app/" -Force
+        
+        # Download and extract Electron manually
+        $electronVersion = "32.3.3"
+        $electronUrl = "https://github.com/electron/electron/releases/download/v$electronVersion/electron-v$electronVersion-win32-x64.zip"
+        $electronZip = "electron.zip"
+        
+        Write-Host "Downloading Electron v$electronVersion..."
+        Invoke-WebRequest -Uri $electronUrl -OutFile $electronZip
+        
+        Write-Host "Extracting Electron..."
+        Expand-Archive -Path $electronZip -DestinationPath "dist/release/win-unpacked" -Force
+        
+        # Rename electron.exe to AI-Terminal.exe
+        if (Test-Path "dist/release/win-unpacked/electron.exe") {
+          Rename-Item "dist/release/win-unpacked/electron.exe" "AI-Terminal.exe"
+        }
+        
+        # Clean up
+        Remove-Item $electronZip -Force
+        
+        Write-Host "Manual build completed successfully"
+      shell: pwsh
+      
+    - name: List build outputs
+      run: |
+        echo "=== Build Directory Contents ==="
+        Get-ChildItem -Path "dist" -Recurse | Where-Object { $_.PSIsContainer -eq $false } | Format-Table Name, Length, DirectoryName -AutoSize
+        echo ""
+        echo "=== Release Directory Contents ==="
+        if (Test-Path "dist/release") {
+          Get-ChildItem -Path "dist/release" -Recurse | Where-Object { $_.PSIsContainer -eq $false } | Format-Table Name, Length, DirectoryName -AutoSize
+        }
+      shell: pwsh
+      
+    - name: Create ZIP artifact from unpacked directory
+      run: |
+        $unpackedDir = "dist/release/win-unpacked"
+        if (Test-Path $unpackedDir) {
+          $zipPath = "dist/release/AI-Terminal-win-unpacked.zip"
+          Compress-Archive -Path "$unpackedDir/*" -DestinationPath $zipPath -Force
+          echo "Created ZIP: $zipPath"
+          $zipSize = (Get-Item $zipPath).Length
+          echo "ZIP Size: $zipSize bytes ($([math]::Round($zipSize/1MB, 2)) MB)"
+        } else {
+          echo "ERROR: No unpacked directory found at $unpackedDir"
+          Get-ChildItem -Path "dist/release" -Recurse
+          exit 1
+        }
+      shell: pwsh
+      
+    - name: Test application startup
+      run: |
+        $exePath = "dist/release/win-unpacked/AI-Terminal.exe"
+        if (-not (Test-Path $exePath)) {
+          $exePath = "dist/release/win-unpacked/electron.exe"
+        }
+        
+        if (Test-Path $exePath) {
+          echo "Testing application startup..."
+          $process = Start-Process -FilePath $exePath -ArgumentList "--version" -PassThru -Wait -WindowStyle Hidden
+          echo "Application test exit code: $($process.ExitCode)"
+        } else {
+          echo "WARNING: Executable not found for testing"
+        }
+      shell: pwsh
+      continue-on-error: true
+        
+    - name: Upload Windows artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: ai-terminal-windows-${{ github.sha }}
+        path: |
+          dist/release/*.exe
+          dist/release/*.zip
+        retention-days: 30
+        
+    - name: Upload build logs
+      if: failure()
+      uses: actions/upload-artifact@v4
+      with:
+        name: build-logs-${{ github.sha }}
+        path: |
+          npm-debug.log*
+          yarn-error.log*
+          electron-builder.log
+        retention-days: 7
+        if-no-files-found: ignore

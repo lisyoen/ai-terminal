@@ -13,7 +13,7 @@ function TerminalView({ onTargetChange, onCwdChange }: TerminalViewProps) {
   const xtermRef = useRef<Terminal | null>(null)
 
   useEffect(() => {
-    if (!terminalRef.current) return
+    if (!terminalRef.current) return;
 
     // Initialize xterm.js
     const terminal = new Terminal({
@@ -27,59 +27,40 @@ function TerminalView({ onTargetChange, onCwdChange }: TerminalViewProps) {
       fontFamily: 'Consolas, "Courier New", monospace',
       fontSize: 14,
       lineHeight: 1.2
-    })
+    });
 
-    terminal.open(terminalRef.current)
-    xtermRef.current = terminal
+    terminal.open(terminalRef.current);
+    xtermRef.current = terminal;
 
     // Set up terminal output listener
     const cleanup = IpcBridge.onTerminalChunk((chunk) => {
-      terminal.write(chunk.text)
-      
-      // Simple parsing to detect directory changes and targets
-      // This is a basic implementation - could be enhanced
-      const text = chunk.text
-      
-      // Detect directory changes (Windows & Unix)
-      const cwdMatch = text.match(/^[A-Z]:\\[^>]*>|^[^$]*\$/) 
+      if (chunk?.text) {
+        // xterm.js는 자동으로 UTF-8 처리하므로 직접 write
+        terminal.write(chunk.text);
+      }
+      const text = chunk.text;
+      const cwdMatch = text.match(/^[A-Z]:\\[^>]*>|^[^$]*\$/);
       if (cwdMatch) {
-        // Extract path from prompt
-        const promptText = cwdMatch[0]
+        const promptText = cwdMatch[0];
         if (promptText.includes(':\\')) {
-          // Windows path
-          const pathMatch = promptText.match(/([A-Z]:\\[^>]*)/)
+          const pathMatch = promptText.match(/([A-Z]:\\[^>]*)/);
           if (pathMatch) {
-            onCwdChange(pathMatch[1])
+            onCwdChange(pathMatch[1]);
           }
         } else {
-          // Unix path - would need more sophisticated parsing
-          // For now, just update that we're in a Unix environment
-          onTargetChange('local')
+          onTargetChange('local');
         }
       }
-      
-      // Detect SSH connections
       if (text.includes('ssh ') || text.includes('Connecting to')) {
-        // Extract SSH target if possible
-        const sshMatch = text.match(/ssh\s+(?:-[^\s]+\s+)*([^\s@]+@[^\s]+)/)
+        const sshMatch = text.match(/ssh\s+(?:-[^\s]+\s+)*([^\s@]+@[^\s]+)/);
         if (sshMatch) {
-          onTargetChange(`ssh://${sshMatch[1]}`)
+          onTargetChange(`ssh://${sshMatch[1]}`);
         }
       }
-    })
+    });
+    return cleanup;
+  }, [onTargetChange, onCwdChange]);
 
-    // Handle terminal input (for future enhancement)
-    terminal.onData((data: string) => {
-      // For now, terminal input is handled by the backend
-      // This could be enhanced to support direct terminal interaction
-      console.log('Terminal input:', data)
-    })
-
-    return () => {
-      cleanup()
-      terminal.dispose()
-    }
-  }, [onTargetChange, onCwdChange])
 
   // Handle terminal resize
   useEffect(() => {
@@ -92,6 +73,9 @@ function TerminalView({ onTargetChange, onCwdChange }: TerminalViewProps) {
       }
     }
 
+    // Initial fit
+    setTimeout(handleResize, 100)
+    
     window.addEventListener('resize', handleResize)
     return () => window.removeEventListener('resize', handleResize)
   }, [])
@@ -111,7 +95,7 @@ function TerminalView({ onTargetChange, onCwdChange }: TerminalViewProps) {
         style={{ height: '100%', width: '100%' }}
       />
     </div>
-  )
+  );
 }
 
-export default TerminalView
+export default TerminalView;

@@ -3,13 +3,15 @@ import { contextBridge, ipcRenderer } from 'electron';
 // 허용된 IPC 채널 목록 정의
 const VALID_CHANNELS = [
   'run',
+  'logUserInput',
   'terminal:chunk',
   'snapshot:ready',
   'llm:suggestion',
   'error',
   'history:recent',
   'history:search',
-  'history:previous'
+  'history:previous',
+  'llm:convert'
 ];
 
 // window.ai 네임스페이스 노출

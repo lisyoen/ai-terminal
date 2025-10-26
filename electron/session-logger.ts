@@ -20,9 +20,8 @@ export class SessionLogger {
   private maxFileSize: number = 10 * 1024 * 1024 // 10MB
   
   constructor() {
-    // Use APPDATA on Windows, ~/.config on Linux/Mac
-    const appDataDir = process.env.APPDATA || path.join(os.homedir(), '.config')
-    this.logDir = path.join(appDataDir, 'ai-terminal', 'logs')
+    // Use project-local logs directory
+    this.logDir = path.join(process.cwd(), 'logs')
     this.ensureLogDirectory()
   }
 
@@ -38,8 +37,12 @@ export class SessionLogger {
   }
 
   private getCurrentLogFilePath(): string {
-    const today = new Date().toISOString().split('T')[0].replace(/-/g, '')
-    return path.join(this.logDir, `${today}.jsonl`)
+    // UTC 기준 날짜로 파일명 생성 (YYYYMMDD)
+    // 로컬 시스템 날짜를 사용하여 로그 파일 이름 생성
+    const now = new Date();
+    const pad = (n: number) => n.toString().padStart(2, '0');
+    const today = `${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}`;
+    return path.join(this.logDir, `${today}.jsonl`);
   }
 
   private shouldRotateLog(filePath: string): boolean {
@@ -57,22 +60,36 @@ export class SessionLogger {
 
   private rotateLogFile(filePath: string) {
     try {
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
-      const dir = path.dirname(filePath)
-      const basename = path.basename(filePath, '.jsonl')
-      const rotatedPath = path.join(dir, `${basename}-${timestamp}.jsonl`)
+      // UTC 기준 타임스탬프로 로테이션
+      const now = new Date();
+      const pad = (n: number) => n.toString().padStart(2, '0');
+      const timestamp = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}_${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`;
+      const dir = path.dirname(filePath);
+      const basename = path.basename(filePath, '.jsonl');
+      const rotatedPath = path.join(dir, `${basename}-${timestamp}.jsonl`);
       
-      fs.renameSync(filePath, rotatedPath)
-      console.log(`Log file rotated: ${filePath} -> ${rotatedPath}`)
+      fs.renameSync(filePath, rotatedPath);
+      console.log(`Log file rotated: ${filePath} -> ${rotatedPath}`);
     } catch (error) {
-      console.error('Failed to rotate log file:', error)
+      console.error('Failed to rotate log file:', error);
     }
   }
 
   appendSnapshot(snapshot: SnapshotReady, target?: string, cwd?: string) {
     try {
+      // KST(UTC+9) ISO8601 timestamp
+      const now = new Date();
+      const pad = (n: number) => n.toString().padStart(2, '0');
+      const year = now.getFullYear();
+      const month = pad(now.getMonth() + 1);
+      const day = pad(now.getDate());
+      const hours = pad(now.getHours());
+      const minutes = pad(now.getMinutes());
+      const seconds = pad(now.getSeconds());
+      const ms = now.getMilliseconds().toString().padStart(3, '0');
+      const timestampKST = `${year}-${month}-${day}T${hours}:${minutes}:${seconds}.${ms}+09:00`;
       const logEntry: LogEntry = {
-        timestamp: new Date().toISOString(),
+        timestamp: timestampKST,
         id: snapshot.id,
         trigger: snapshot.trigger,
         exitCode: snapshot.summary.exitCode,
@@ -97,6 +114,64 @@ export class SessionLogger {
       console.log(`Logged snapshot ${snapshot.id} to ${logFilePath}`)
     } catch (error) {
       console.error('Failed to append snapshot to log:', error)
+    }
+  }
+
+  // Simple logging method for terminal events
+  logTerminalEvent(id: string, trigger: string, message: string, data?: any) {
+    try {
+      // 입력값 등 추가 데이터는 tail에 명확히 남기고, 로그 entry에 병합
+      let tailMsg = message;
+      if (data?.inputText) {
+        // 한글 입력값이 깨지지 않도록 명확히 처리
+        tailMsg += ` | inputText: ${String(data.inputText)}`;
+      }
+      if (data?.originalCmd) {
+        tailMsg += ` | originalCmd: ${String(data.originalCmd)}`;
+      }
+      if (data?.translatedCmd) {
+        tailMsg += ` | translatedCmd: ${String(data.translatedCmd)}`;
+      }
+      // 로그 entry에 모든 data 필드 병합
+    // 로그 entry의 timestamp를 KST(UTC+9) ISO8601 형식으로 기록
+    const now = new Date();
+    // KST 오프셋 적용 (UTC 기준 +9시간)
+    const pad = (n: number) => n.toString().padStart(2, '0');
+    const year = now.getFullYear();
+    const month = pad(now.getMonth() + 1);
+    const day = pad(now.getDate());
+    const hours = pad(now.getHours());
+    const minutes = pad(now.getMinutes());
+    const seconds = pad(now.getSeconds());
+    const ms = now.getMilliseconds().toString().padStart(3, '0');
+    const timestamp = `${year}-${month}-${day}T${hours}:${minutes}:${seconds}.${ms}+09:00`;
+      const logEntry: LogEntry = {
+        timestamp,
+        id: id,
+        trigger: trigger,
+        exitCode: data?.exitCode,
+        elapsedMs: data?.elapsedMs || 0,
+        bytes: Buffer.byteLength(JSON.stringify(data || {}), 'utf8'),
+        tail: tailMsg,
+        target: data?.target || 'local',
+        cwd: data?.cwd || process.cwd(),
+        ...data // 모든 추가 필드 병합
+      }
+
+  const logFilePath = this.getCurrentLogFilePath();
+  console.log(`[DEBUG] logTerminalEvent called. Writing to:`, logFilePath);
+  console.log(`[SessionLogger] logTerminalEvent (KST):`, { logFilePath, timestamp: logEntry.timestamp, logEntry });
+
+      if (this.shouldRotateLog(logFilePath)) {
+        this.rotateLogFile(logFilePath);
+      }
+
+      // 항상 UTF-8로 JSON.stringify 결과를 기록
+      const logLine = JSON.stringify(logEntry, null, 0) + '\n';
+      fs.appendFileSync(logFilePath, logLine, { encoding: 'utf8' });
+
+    } catch (error) {
+      console.error('Failed to log terminal event:', error);
     }
   }
 
